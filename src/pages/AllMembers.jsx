@@ -1,43 +1,39 @@
-import React, { use, useEffect, useState } from "react";
-import { addTaskDB, deleteTaskDB, fetchTasksDB, updateTaskDB } from "../utils/functions.js";
-import { collection, onSnapshot } from "firebase/firestore";
+import { useEffect, useState } from "react";
+import {
+  addTaskDB,
+  deleteTaskDB,
+  fetchNextTasksDB,
+  fetchTasksDB,
+  updateTaskDB,
+} from "../utils/functions.js";
+import { collection } from "firebase/firestore";
 import { db } from "../utils/firebase.js";
+import toast, { Toaster } from "react-hot-toast";
 
 const AllMembers = () => {
   const [newTodo, setNewTodo] = useState("");
   const [todos, setTodos] = useState("");
-  const [updateTodo,setUpdateTodo]=useState(false);
-  const [todoid,setTodoId]=useState("")
+  const [updateTodo, setUpdateTodo] = useState(false);
+  const [todoid, setTodoId] = useState("");
+  const [lastDoc,setLastDoc]=useState(null)
 
-  const tasksCollectionRef=collection(db,"tasks");
+  const tasksCollectionRef = collection(db, "tasks");
 
-
-
-
-  async function deleteTask(task){
-    event.preventDefault();
-
-    try {
-      const response = await deleteTaskDB(task);
-      if (response.success) {
-        alert("Task Deleted");
-    
-      } else {
-        alert(`Error:${response.error}`);
-      }   
-    } catch (error) {
-      console.error("Error deleting document: ", error);
-    }
-  }
-
-
-
+  // Create Task
   async function addTask() {
+    event.preventDefault();
     try {
       const response = await addTaskDB(newTodo);
 
       if (response.success) {
-        alert("Task Added");
+        const structredData = {
+          text: newTodo,
+          completed: false,
+        };
+        toast.success("Task Added");
+        setTodos((prev) => {
+          return [...prev, structredData];
+        });
       } else {
         alert(`Error:${response.error}`);
       }
@@ -46,45 +42,77 @@ const AllMembers = () => {
     }
   }
 
-
-  
-
-  async function updateTask() {
-    const response = await updateTaskDB(newTodo,todoid);
+  // Read Tasks
+  async function fetchTasks() {
+    const response = await fetchTasksDB();
     if (response.success) {
-      alert("Task Updated");
-     
-      setUpdateTodo(false)
-      setNewTodo("")
+      toast.success("Task fetched");
+      setTodos(response.data);
+      setLastDoc(response.lastdoc)
     } else {
       alert(`Error:${response.error}`);
     }
   }
 
-  
+  // Update Task
+  async function updateTask() {
+    const response = await updateTaskDB(newTodo, todoid);
+    if (response.success) {
+      toast.success("Task Updated");
+
+      setUpdateTodo(false);
+      setNewTodo("");
+    } else {
+      alert(`Error:${response.error}`);
+    }
+  }
+
+  // Delete Task
+  async function deleteTask(task) {
+    event.preventDefault();
+
+    try {
+      const response = await deleteTaskDB(task);
+      if (response.success) {
+        toast.success("Task Deleted");
+      } else {
+        alert(`Error:${response.error}`);
+      }
+    } catch (error) {
+      console.error("Error deleting document: ", error);
+    }
+  }
+
+  //show more task
+
+  async function showMoreTask() {
+    event.preventDefault()
+
+    const response = await fetchNextTasksDB(lastDoc);
+
+    if (response.success) {
+      toast.success("Fetched Next Task");
+      console.log('response success ==> ', response.data);
+      setTodos((prev) => { return [...prev, ...response.data] })
+      
+      console.log('next-lastdoc==>',response.nextLastDoc);
+      setLastDoc(response.nextLastDoc)
+      
+    } else {
+      alert("Failed to fetch next task");
+      console.log("Error==>", response.error);
+    }
+  }
 
   useEffect(() => {
-
-    const unsubscribe = onSnapshot(tasksCollectionRef,(snapShot)=>{
-      const items = snapShot.docs.map((doc)=>({
-        id:doc.id,
-        ...doc.data()
-      }))
-      setTodos(items)
-    })
-
-    // 2. We RETURN that function from useEffect.
-    //    React will automatically call this when the component unmounts.
-    return () => {
-        unsubscribe();
-    }
-
-
+    fetchTasks();
   }, []);
 
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Header */}
+      <Toaster position="top-center" reverseOrder={false} />
+
       <div className="bg-gray-900 px-6 py-4 border-b border-gray-700">
         <div className="flex items-center justify-between">
           {/* Left side - Traffic lights and navigation */}
@@ -224,47 +252,57 @@ const AllMembers = () => {
           </div>
 
           {/* Tab Navigation */}
-          <div className="flex space-x-1 mb-8">
-            {/* Search bar */}
-            <div className="flex-1 max-w-2xl me-8">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder=""
-                  onChange={(e) => setNewTodo(e.target.value)}
-                  value={newTodo}
-                  className="w-full bg-gray-800 text-white px-4 py-2 pl-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+          <div className=" flex space-x-1 mb-8  ">
+            {/* Input bar */}
+
+            <div className="  mx-auto flex gap-4 ">
+              <form onSubmit={addTask} className="mx-auto flex gap-4">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder=""
+                    onChange={(e) => setNewTodo(e.target.value)}
+                    value={newTodo}
+                    className="w-full bg-gray-800 text-white px-4 py-2 pl-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                {updateTodo == true ? (
+                  <div className="flex gap-4">
+                    <button
+                      onClick={updateTask}
+                      className="px-4 py-2 bg-lime-300 text-black rounded-lg"
+                    >
+                      Update
+                    </button>
+                    <button
+                      onClick={() => setUpdateTodo(false)}
+                      className="px-4 py-2 bg-white text-black rounded-lg"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    // onClick={addTask}
+                    type="submit"
+                    className="px-4 py-2 bg-lime-300 text-black rounded-lg"
+                  >
+                    Add Task
+                  </button>
+                )}
+
+                <button
+                  onClick={showMoreTask}
+                  className="px-4 py-2 bg-white text-black rounded-lg"
+                >
+                  Show More
+                </button>
+              </form>
             </div>
-          { updateTodo==true?( 
-
-            <div className="flex gap-4">
-
-               <button
-              onClick={updateTask}
-              className="px-4 py-2 bg-lime-300 text-black rounded-lg"
-              >
-              Update
-            </button>
-               <button
-              onClick={()=>setUpdateTodo(false)}
-              className="px-4 py-2 bg-white text-black rounded-lg"
-              >
-              Cancel
-            </button>
-              </div>
-            ):(<button
-              onClick={addTask}
-              className="px-4 py-2 bg-lime-300 text-black rounded-lg"
-            >
-              Add Task
-            </button>)
-            }
           </div>
 
           {/* containers of task */}
-          <div className="mb-6 pr-14">
+          <div className="mx-auto w-xl">
             {todos &&
               todos.map((todo) => {
                 // console.log(todo);
@@ -276,56 +314,20 @@ const AllMembers = () => {
                       <p className="text-sm text-gray-400">{todo.completed}</p>
                     </div>
                     <div className="flex items-center space-x-4">
-                      <span className="px-3 py-1 bg-gray-700 text-sm rounded-lg">
-                        Class
-                      </span>
-                      <div className="flex items-center space-x-2 text-sm text-gray-400">
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                          />
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                          />
-                        </svg>
-                        <span>Lexington Avenue GYM</span>
-                      </div>
-                      <div className="flex items-center space-x-2 text-sm text-gray-400">
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"
-                          />
-                        </svg>
-                        <span>10/20 Participants</span>
-                      </div>
-                      <button onClick={(e)=>deleteTask(todo)} className="px-3 py-1 bg-red-600 text-sm rounded-lg">
+                      <button
+                        onClick={(e) => deleteTask(todo)}
+                        className="px-3 py-1 bg-red-600 text-sm rounded-lg"
+                      >
                         Delete
                       </button>
-                      <button onClick={()=>{ setUpdateTodo(true)
-                       setNewTodo(todo.text)
-                       setTodoId(todo.id)
-
-                        
-                      }} className="px-3 py-1 bg-lime-300 text-sm rounded-lg text-black">
+                      <button
+                        onClick={() => {
+                          setUpdateTodo(true);
+                          setNewTodo(todo.text);
+                          setTodoId(todo.id);
+                        }}
+                        className="px-3 py-1 bg-lime-300 text-sm rounded-lg text-black"
+                      >
                         Update
                       </button>
                       <button className="text-gray-400 hover:text-white">
